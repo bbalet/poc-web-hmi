@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>POC Of js</title>
+        <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0-browser/dist/fabric.min.js" integrity="sha256-SPjwkVvrUS/H/htIwO6wdd0IA8eQ79/XXNAH+cPuoso=" crossorigin="anonymous"></script>
+
+<script type="text/javascript">
+/**
+ * Singleton to access the paper context (i.e. the canvas)
+ */
+ var FabricContextSingleton = (function(){
+    function PaperContext() {
+        // this.canvas = new fabric.Canvas('myCanvas', {
+        //     containerClass: "wrapper"
+        // });
+        this.canvas = new fabric.Canvas('myCanvas');
+    }
+    var instance;
+    return {
+        getInstance: function(){
+            if (instance == null) {
+                instance = new PaperContext();
+                instance.constructor = null;
+            }
+            return instance;
+        }
+   };
+})();
+
+/**
+ * Parent Widget class
+ */
+ class Widget {
+    x;
+    y;
+    group;
+    canvas;
+
+    /**
+     * Constructor
+     */
+    constructor() {
+        const fabricContext = FabricContextSingleton.getInstance();
+        this.canvas = fabricContext.canvas;
+    }
+
+    /**
+     * Move the widget to another location in the canvas
+     * @param {int} x X coordinate
+     * @param {int} y Y coordinate
+     */
+    translate(x, y) {
+        this.group.translate(new Point(x, y));
+    }
+
+    /**
+     * Event listener to change the value of the cursor
+     * @param {event} event Event object
+     */
+     onChange(event){
+        this.setValue(parseInt(event.detail));
+    }
+}
+
+/**
+ * Draw an Cursor widget
+ */
+ class Cursor extends Widget {
+    cursor;
+    value;
+    min;
+    max;
+
+    /**
+     * Widget constructor
+     * @param {int} x X coordinate
+     * @param {int} y Y coordinate
+     */
+    constructor(x, y, value=0, min=-6, max=6, step=1) {
+        super();
+        this.x = x;
+        this.y = y;
+        this.min = min;
+        this.max = max;
+        this.step = step;
+        this.value = value;
+        this.build();
+        //Subscribe to change value events
+        window.addEventListener("Cursor_onChange", this.onChange.bind(this));
+    }
+
+    /**
+     * Group the different paths of the widget
+     */
+    build() {
+        let rect = new fabric.Rect({
+            width: 20,
+            stroke: 'black',
+            fill: '',
+            hasBorders:true,
+            height: 200,
+            left: 0,
+            top: 0
+        });
+
+        let text6 = new fabric.Text('6', { fontSize: 10, left: 10, top: 20 });
+        let text2 = new fabric.Text('2', { fontSize: 10, left: 10, top: 40 });
+        let text1 = new fabric.Text('1', { fontSize: 10, left: 10, top: 60 });
+        let text0 = new fabric.Text('_', { fontSize: 10, left: 10, top: 80 });
+        let textm1 = new fabric.Text('-1', { fontSize: 10, left: 7, top: 100 });
+        let textm2 = new fabric.Text('-2', { fontSize: 10, left: 7, top: 120 });
+        let textm6 = new fabric.Text('-6', { fontSize: 10, left: 7, top: 140 });
+        
+        this.cursor = new fabric.Triangle({
+            width: 15, height: 15, fill: 'black', left: 20, top: 100, angle: -90
+        });
+
+        this.group = new fabric.Group([ rect, text6, text2, text1, text0, textm1, textm2, textm6, this.cursor ], {
+            left: this.x,
+            top: this.y,
+            selectable: false
+        });
+
+        this.canvas.add(this.group);
+    }
+
+    /**
+     * Set the value of the altimeter
+     * TODO: implement the body
+     * @param {int} value absolute value of the altimeter
+     * @param {bool} animate if true, animate the transition to the new value
+     */
+     setValue(value, animate=false) {
+        if (value < this.value) {
+            this.cursor.animate('top', '+=20', { onChange: this.canvas.renderAll.bind(this.canvas) });
+        } else {
+            this.cursor.animate('top', '-=20', { onChange: this.canvas.renderAll.bind(this.canvas) });
+        }
+        this.value = value;
+    }
+}
+
+/**
+ * Draw a ROOAS widget
+ */
+ class Rooas extends Widget {
+    /**
+     * Widget constructor
+     * @param {int} x X coordinate
+     * @param {int} y Y coordinate
+     */
+    constructor(x, y) {
+        super();
+        this.x = x;
+        this.y = y;
+        this.build();
+    }
+
+    /**
+     * Group the different paths of the widget
+     */
+    build() {
+        let rect = new fabric.Rect({
+            width: 40,
+            stroke: 'white',
+            fill: 'grey',
+            hasBorders:true,
+            height: 200,
+            left: 0,
+            top: 0
+        });
+        
+        let line = new fabric.Line([0, 0, 41, 0], {
+            stroke: 'red'
+        });
+        line.bringToFront();    //on top of rectangle
+
+        let text14 = new fabric.Text('14', { fontSize: 12, fontFamily: 'Arial', stroke: 'white', left: 3, top: 160 });
+        let textL = new fabric.Text('L', { fontSize: 12, fontFamily: 'Arial', stroke: 'white', left: 3, top: 180 });
+
+        this.group = new fabric.Group([ rect, line, text14, textL ], {
+            left: this.x,
+            top: this.y,
+            selectable: false
+        });
+
+        this.canvas.add(this.group);
+    }
+}
+
+window.onload = function() {
+    //Inject paper lib and build the HMI
+    const paperContext = FabricContextSingleton.getInstance();
+    // const background = new Background();
+    const rooasWidget = new Rooas(330, 250);
+    // const altiWidget = new Altimeter(10, 10);
+    const cursorWidget = new Cursor(350, 10);
+
+    //Oberver pattern through event => this part might be done by relying on state store (eg redux)
+    document.getElementById('cursor').onchange = function() {
+        const event = new CustomEvent('Cursor_onChange', { detail: document.getElementById('cursor').value });
+        window.dispatchEvent(event);
+    };
+
+
+    //3D landscape
+    let innerWidth = 400;
+    let a = document.getElementById("a");
+    
+    g = a.getContext("webgl");
+    d = document;
+    window.requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame || window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+      for(i in g){
+        g[i[0]+i[6]]=g[i];
+      }
+      iMouse=[0,0,0,0];
+      with(g){
+        
+          p=cP();
+          sS(s=cS(35633),"attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}");
+          compileShader(s);
+          aS(p,s);
+          sS(s=cS(FN),'precision mediump float;uniform float iTime,iFrame,iDate,iTimeDelta;varying lowp vec4 fragCoord;uniform vec2 iResolution;uniform vec4 iMouse;'+shader.innerText+'void main(){mainImage(gl_FragColor,gl_FragCoord.xy);gl_FragColor.w=1.;}');
+          compileShader(s);
+          aS(p,s);
+          lo(p);
+          console.log(g.getShaderInfoLog(s) || 'shader OK');
+          console.log(g.getProgramInfoLog(p) || 'program OK');
+          ug(p);
+          bf(G=34962,cB());
+          eV(0);
+          vA(0,2,5120,0,0,0);
+          bD(G,new Int8Array([-3,1,1,-3,1,1]),35044);
+          iFrame=0;
+          o=0;
+          f=new Date()/1e3
+          d=0;
+          clearColor(0,0,0,1);
+          clear(g.COLOR_BUFFER_BIT);
+        
+        (L=function(){
+          d=(new Date()/1e3-f);
+          f=new Date()/1e3;
+          uniform1f(gf(p,"iTimeDelta"),d);
+          uniform1f(gf(p,"iTime"),o+=d);
+          uniform1f(gf(p,"iFrame"),iFrame++);
+          uniform1f(gf(p,"iDate"),~~f);
+          uniform4f(gf(p,"iMouse"),iMouse[0],iMouse[1],iMouse[2],iMouse[3]);
+          uniform2f(gf(p,"iResolution"), innerWidth/2, innerHeight/2);
+          dr(6,0,3);
+          requestAnimationFrame(L);
+        })();
+      }
+      y=0;
+      z=1;
+    //   onmousedown=onmouseup=function(e){y^=1}
+    //   a.onmousemove=function(e){if(y)iMouse[0]=e.pageX*0.495*z,iMouse[1]=e.pageY}
+    //   a.onclick=function(e){iMouse[2]=e.pageX*0.495*z,iMouse[3]=e.pageY}
+}
+</script>
+
+<script id=shader type="x-shader/x-fragment">
+    // Shader inputs:
+    // - iResolution: vec2(w, h)
+    // - iTime: float
+    // - iTimeDelta: float
+    // - iFrame: int
+    // - iMouse: vec4(x, y, clickx, clicky)
+    // - iDate: float
+    
+    // feel free to reuse
+
+    mat2 rot2d(float a) {return mat2(cos(a),sin(a),-sin(a),cos(a));} // Angle => 2D rotation matrix
+    
+    float terrain_height(vec2 position) { // https://www.iquilezles.org/www/articles/fbm/fbm.htm
+      float height=0., amplitude, n, am;
+      vec2 pp = position*.1;
+      float z = length(sin(pp)*cos(pp));
+      am = z*z*z*z*z*.6+.6;
+      amplitude=1.4*z*z;
+      for(int i = 0; i < 20; i++) { // Sum up 20 layers
+        n = sin(position.x) * cos(position.y); n = n * n * n; // Simple base pattern, no noise
+        if(i>9) n*=clamp(1., 1./(height*height*9.), 4.); // This does the "trees"
+        height += n * amplitude; // Accumulate value at current amplitude
+        position *= rot2d(float(i*i)); // Rotate (phase-shift?) by a hash of the current iteration
+        position *= 1.41;
+        amplitude = am * amplitude;
+      }
+      return abs(height) - .02;
+    }
+    
+    void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
+      float time = iTime * .2 + iMouse.x / iResolution.x * 28.;
+      vec2 r=iResolution,uv = (fragCoord.xy * 2. - r.xy) / min(r.x,r.y);
+      vec3 p, water_tint = vec3(1), ray_origin = vec3(-cos(time*.5)*7.,1.,time+4.), // Camera position
+        ray_direction = normalize(vec3(uv.x, uv.y - .7 + cos(time) * .5, 1.9));
+      ray_direction.xy *= rot2d(sin(time*.5)*.5); // Camera orientation and field of view
+      float distance = 0., ray_length = 0.;
+      for(int i = 0; i < 66; i++) { // Raymarching loop
+        p = ray_origin + ray_direction * ray_length; // Get current ray position
+        if(distance<.1 && p.y<0.) { // If we're close to the surface check p.y for a water hit
+          ray_origin.y = -ray_origin.y; ray_direction.y = -ray_direction.y; // Reflect ray
+          water_tint = vec3(.7,.8,.9)/(ray_direction.y);
+        } else { // Not underwater - march
+          distance = p.y-terrain_height(p.xz); // Real distance is hard to calculate so use p's
+          // height above the terrain, and since that's obviously
+          ray_length += distance * .66; // wrong - only march .6 of the way and hope for the best.
+        }
+        if(ray_length > 20.) break; // We are far away (in the sky)
+      }
+      vec2 h = vec2(.0001, 0); // From https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+      vec3 surface_normal = normalize(vec3(terrain_height(p.xz-h.xy) - terrain_height(p.xz+h.xy),
+                                           2.*h.x, terrain_height(p.xz-h.yx) - terrain_height(p.xz+h.yx)));
+      vec3 terrain_color = mix(vec3(.4,.6,.1),vec3(.7,.65,.15),abs(p.y)*8.)*.5
+        * (surface_normal.z * .5 + .5); // Terrain, backlit
+      vec3 sky_color = mix(vec3(1.1,1.,.8),vec3(.6,.7,.8),abs(ray_direction.y)); // Sunny horizon
+      vec3 color = mix(terrain_color, sky_color, min(1.,ray_length/20.)); // Mountains-sky fade
+      color *= water_tint; // Water color
+      fragColor = vec4(pow(color, vec3(.4545)), 1); // Gamma correction
+    }    
+</script>
+
+<style>
+.canvas-container { position:relative; width:400px; height:500px }
+.canvas-container canvas { position:absolute; top:0; left:0 }
+</style>
+
+    </head>
+    <body>
+        <table border="0" width="100%">
+            <tr>
+                <td width="450">
+                    <div id="wrapper">
+                        <div class="canvas-container">
+                            <canvas class="lower-canvas" id="a" width="400" height="500" ></canvas>
+                            <canvas class="upper-canvas" id="myCanvas" width="400" height="500" style="border:3px solid"></canvas>
+                        </div>
+                    </div>
+
+                </td>
+                <td>
+                    <label for="cursor">Cursor</label>
+                    <input id="cursor" name="cursor" type="number" value="0" min="-6" max="6">
+                </td>
+            </tr>
+        </table>
+    </body>
+</html>
